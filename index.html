@@ -1,138 +1,165 @@
 <!DOCTYPE html>
-// This is demo web page meant purely for demonstration purposes. We offer no warranty or guarantees and you use this at your own risk!
 <html lang="en">
 <head>
-<meta charset="UTF-8">
+<meta charset="UTF-8" />
 <title>Follicle Detection Demo</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1" />
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css"/>
 <style>
-    body {
-        font-family: Arial, sans-serif;
-        margin: 0;
-        padding: 0;
-    }
-    #viewer {
-        width: 100%;
-        height: 700px;
-        background: #000;
-    }
-    #layer-controls {
-        margin: 10px;
-        font-size: 16px;
-    }
+  body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
+  #topbar { padding: 10px; }
+  #viewer { width: 100%; height: 720px; background: #0b0b0b; border-top: 1px solid #ddd; border-bottom: 1px solid #ddd; }
+  #layer-controls { padding: 10px; }
+  #status { padding: 10px; display:none; }
+  #status.error { display:block; color:#721c24; background:#f8d7da; border:1px solid #f5c6cb; margin:10px; border-radius:6px; }
+  #status.ok { display:block; color:#155724; background:#d4edda; border:1px solid #c3e6cb; margin:10px; border-radius:6px; }
+  code { background:#f6f8fa; padding:2px 4px; border-radius:4px; }
 </style>
 </head>
 <body>
 
-<h2 style="margin: 10px;">Follicle Detection Demo</h2>
+<div id="topbar">
+  <h2 style="margin:0 0 6px 0;">Follicle Detection Demo</h2>
+  <div>Tile source: <code id="dziPathLabel"></code></div>
+  <div>Try opening a level‑0 tile directly:<br/>
+    <code id="tileHint"></code>
+  </div>
+</div>
+
+<div id="status" class=""></div>
 <div id="viewer"></div>
+
 <div id="layer-controls">
-    <label><input type="checkbox" class="layer-toggle" data-layer="Ground Truth" checked> Ground Truth</label><br>
-    <label><input type="checkbox" class="layer-toggle" data-layer="Object Detection" checked> Object Detection</label><br>
-    <label><input type="checkbox" class="layer-toggle" data-layer="Segmentation" checked> Segmentation</label><br>
-    <label><input type="checkbox" class="layer-toggle" data-layer="Merged" checked> Merged</label><br>
+  <label><input type="checkbox" class="layer-toggle" data-layer="Ground Truth" checked> Ground Truth</label><br>
+  <label><input type="checkbox" class="layer-toggle" data-layer="Object Detection" checked> Object Detection</label><br>
+  <label><input type="checkbox" class="layer-toggle" data-layer="Segmentation" checked> Segmentation</label><br>
+  <label><input type="checkbox" class="layer-toggle" data-layer="Merged" checked> Merged</label><br>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/openseadragon/4.1.0/openseadragon.min.js"></script>
 <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
-
 <script>
-// ======== CONFIGURATION ========
-
-// Path to your DZI file (relative to index.html)
+// ===== CONFIG =====
+// Keep everything in the repo root unless you change these paths.
 const dziPath = "17126465_dzi.dzi";
-
-// GeoJSON layer file paths (relative to index.html)
 const layers = {
-    "Ground Truth": "17126465.json",
-    "Object Detection": "od_preds_view.geojson",
-    "Segmentation": "segm_preds_view.geojson",
-    "Merged": "merged_preds_view.geojson"
+  "Ground Truth": "17126465.json",
+  "Object Detection": "od_preds_view.geojson",
+  "Segmentation": "segm_preds_view.geojson",
+  "Merged": "merged_preds_view.geojson"
 };
-
-// Colorblind-friendly palette (Okabe-Ito)
 const layerColors = {
-    "Ground Truth": "#E69F00",      // orange
-    "Object Detection": "#56B4E9",  // sky blue
-    "Segmentation": "#009E73",      // bluish green
-    "Merged": "#D55E00"             // vermillion
+  "Ground Truth": "#E69F00",
+  "Object Detection": "#56B4E9",
+  "Segmentation": "#009E73",
+  "Merged": "#D55E00"
 };
 
-// ======== INITIALIZE VIEWER ========
-let viewer = OpenSeadragon({
-    id: "viewer",
-    prefixUrl: "https://cdnjs.cloudflare.com/ajax/libs/openseadragon/4.1.0/images/",
-    tileSources: dziPath,
-    showNavigator: true,
-    showZoomControl: true,
-    gestureSettingsMouse: {
-        clickToZoom: false,
-        dblClickToZoom: true,
-        scrollToZoom: true
-    }
+// UI labels
+document.getElementById('dziPathLabel').textContent = dziPath;
+const tileGuess = dziPath.replace(/\.dzi$/i, "_files/0/0_0.jpeg");
+document.getElementById('tileHint').textContent = location.origin + location.pathname.replace(/\/[^\/]*$/, '/') + tileGuess;
+
+// Status helper
+function setStatus(msg, ok=false) {
+  const el = document.getElementById('status');
+  el.className = ok ? 'ok' : 'error';
+  el.innerHTML = msg;
+  el.style.display = 'block';
+  console[ok ? 'log' : 'error'](msg.replace(/<[^>]*>/g, ''));
+}
+
+// ===== Initialize OpenSeadragon =====
+const viewer = OpenSeadragon({
+  id: "viewer",
+  prefixUrl: "https://cdnjs.cloudflare.com/ajax/libs/openseadragon/4.1.0/images/",
+  tileSources: dziPath,
+  showNavigator: true,
+  showZoomControl: true,
+  gestureSettingsMouse: {
+    clickToZoom: false,
+    dblClickToZoom: true,
+    scrollToZoom: true
+  }
 });
 
+// Debug events
+viewer.addHandler('open', () => {
+  setStatus("DZI opened successfully.", true);
+  console.log("OSD: open");
+});
+
+viewer.addHandler('open-failed', (e) => {
+  setStatus("Failed to open DZI. Check that <code>" + dziPath + "</code> exists and the *_files folder is named correctly.", false);
+  console.error("OSD: open-failed", e);
+});
+
+viewer.addHandler('add-item-failed', (e) => {
+  setStatus("Failed to add item (tile source).", false);
+  console.error("OSD: add-item-failed", e);
+});
+
+viewer.addHandler('tile-load-failed', (e) => {
+  setStatus("Tile load failed. Likely path or extension mismatch. See browser console Network tab for the failing URL.", false);
+  console.error("OSD: tile-load-failed", e);
+});
+
+// ===== Leaflet overlay on top of OSD =====
 let overlays = {};
-
-// ======== ADD LEAFLET OVERLAY ========
 viewer.addHandler('open', function () {
-    let leafletDiv = document.createElement('div');
-    leafletDiv.style.position = 'absolute';
-    leafletDiv.style.top = '0';
-    leafletDiv.style.left = '0';
-    leafletDiv.style.width = '100%';
-    leafletDiv.style.height = '100%';
-    leafletDiv.style.pointerEvents = 'none';
-    viewer.container.appendChild(leafletDiv);
+  // Create the Leaflet surface
+  const leafletDiv = document.createElement('div');
+  Object.assign(leafletDiv.style, {
+    position: 'absolute', top: '0', left: '0', width: '100%', height: '100%',
+    pointerEvents: 'none' // Allow OSD interactions
+  });
+  viewer.container.appendChild(leafletDiv);
 
-    let map = L.map(leafletDiv, {
-        crs: L.CRS.Simple,
-        zoomControl: false,
-        attributionControl: false,
-        dragging: false,
-        scrollWheelZoom: false,
-        doubleClickZoom: false,
-        boxZoom: false,
-        keyboard: false,
-        tap: false
-    }).setView([0, 0], 0);
+  const map = L.map(leafletDiv, {
+    crs: L.CRS.Simple,
+    zoomControl: false,
+    attributionControl: false,
+    dragging: false, scrollWheelZoom: false, doubleClickZoom: false,
+    boxZoom: false, keyboard: false, tap: false
+  }).setView([0, 0], 0);
 
-    map.fitBounds([
-        [0, 0],
-        [viewer.world.getItemAt(0).getContentSize().y,
-         viewer.world.getItemAt(0).getContentSize().x]
-    ]);
+  const size = viewer.world.getItemAt(0).getContentSize();
+  map.fitBounds([[0,0],[size.y, size.x]]);
 
-    // Load layers
-    for (const [name, path] of Object.entries(layers)) {
-        fetch(path)
-            .then(res => res.json())
-            .then(geojson => {
-                let layer = L.geoJSON(geojson, {
-                    style: {
-                        color: layerColors[name],
-                        weight: 1.5,
-                        fillOpacity: 0.2
-                    }
-                });
-                layer.addTo(map);
-                overlays[name] = layer;
-            });
-    }
+  // Sync pan/zoom from OSD → Leaflet
+  viewer.addHandler('animation', function () {
+    const center = viewer.viewport.getCenter();
+    const centerPx = viewer.viewport.viewportToImageCoordinates(center);
+    map.setView([centerPx.y, centerPx.x], map.getZoom(), { animate: false });
+  });
 
-    // Layer toggle controls
-    document.querySelectorAll('.layer-toggle').forEach(checkbox => {
-        checkbox.addEventListener('change', e => {
-            const layer = overlays[e.target.dataset.layer];
-            if (!layer) return;
-            if (e.target.checked) {
-                layer.addTo(map);
-            } else {
-                map.removeLayer(layer);
-            }
+  // Load layers
+  for (const [name, path] of Object.entries(layers)) {
+    fetch(path)
+      .then(r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status} for ${path}`);
+        return r.json();
+      })
+      .then(geojson => {
+        const layer = L.geoJSON(geojson, {
+          style: () => ({ color: layerColors[name], weight: 1.5, fillOpacity: 0.2 })
         });
+        layer.addTo(map);
+        overlays[name] = layer;
+      })
+      .catch(err => {
+        setStatus(`Failed to load layer <code>${name}</code> from <code>${path}</code>: ${err.message}`, false);
+      });
+  }
+
+  // Layer toggles
+  document.querySelectorAll('.layer-toggle').forEach(cb => {
+    cb.addEventListener('change', e => {
+      const layer = overlays[e.target.dataset.layer];
+      if (!layer) return;
+      if (e.target.checked) layer.addTo(map); else map.removeLayer(layer);
     });
+  });
 });
 </script>
 
