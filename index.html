@@ -80,7 +80,7 @@ viewer.addHandler('open', () => {
   setStatus("DZI opened successfully.", true);
   // If you want default initial zoom, remove the next two lines.
   const home = viewer.viewport.getHomeZoom();
-  viewer.viewport.zoomTo(home * 1.5, viewer.viewport.getCenter(), true);
+  viewer.viewport.zoomTo(home * 1.0, viewer.viewport.getCenter(), true);
 });
 
 viewer.addHandler('open-failed', (e) => setStatus("Failed to open DZI. Check that <code>"+dziPath+"</code> and the *_files folder exist.", false));
