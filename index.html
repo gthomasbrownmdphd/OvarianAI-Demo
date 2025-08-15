@@ -88,7 +88,7 @@ viewer.addHandler('tile-load-failed', (e) => setStatus("Tile load failed: check 
 
 // Buttons
 document.getElementById('btn-zoom-initial').addEventListener('click', () => {
-  viewer.viewport.zoomTo(viewer.viewport.getZoom() * 4, null, true);
+  viewer.viewport.zoomTo(viewer.viewport.getZoom() * 2, null, true);
 });
 document.getElementById('btn-home').addEventListener('click', () => viewer.viewport.goHome(true));
 
