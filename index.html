@@ -13,7 +13,6 @@
   #status { padding: 10px; display:none; }
   #status.error { display:block; color:#721c24; background:#f8d7da; border:1px solid #f5c6cb; margin:10px; border-radius:6px; }
   #status.ok { display:block; color:#155724; background:#d4edda; border:1px solid #c3e6cb; margin:10px; border-radius:6px; }
-  /* Make Leaflet overlay fully transparent */
   .leaflet-container { background: transparent !important; }
 </style>
 </head>
@@ -58,9 +57,6 @@ const layerColors = {
 };
 
 document.getElementById('dziPathLabel').textContent = dziPath;
-const tileGuess = dziPath.replace(/\.dzi$/i, "_files/0/0_0.jpeg");
-document.getElementById('tileHint').textContent =
-  location.origin + location.pathname.replace(/\/[^\/]*$/, '/') + tileGuess;
 
 function setStatus(msg, ok=false) {
   const el = document.getElementById('status');
@@ -82,7 +78,8 @@ const viewer = OpenSeadragon({
 
 viewer.addHandler('open', () => {
   setStatus("DZI opened successfully.", true);
-  // Immediately zoom in a bit so you're not looking at the 1‑pixel level
+  // If you want default initial zoom, remove the next two lines.
+  const home = viewer.viewport.getHomeZoom();
   viewer.viewport.zoomTo(home * 1.5, viewer.viewport.getCenter(), true);
 });
 
