@@ -9,11 +9,12 @@
   body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; }
   #topbar { padding: 10px; }
   #viewer { width: 100%; height: 720px; background: #0b0b0b; border-top: 1px solid #ddd; border-bottom: 1px solid #ddd; }
-  #layer-controls { padding: 10px; }
+  #layer-controls, #buttons { padding: 10px; }
   #status { padding: 10px; display:none; }
   #status.error { display:block; color:#721c24; background:#f8d7da; border:1px solid #f5c6cb; margin:10px; border-radius:6px; }
   #status.ok { display:block; color:#155724; background:#d4edda; border:1px solid #c3e6cb; margin:10px; border-radius:6px; }
-  code { background:#f6f8fa; padding:2px 4px; border-radius:4px; }
+  /* Make Leaflet overlay fully transparent */
+  .leaflet-container { background: transparent !important; }
 </style>
 </head>
 <body>
@@ -29,6 +30,11 @@
 <div id="status" class=""></div>
 <div id="viewer"></div>
 
+<div id="buttons">
+  <button id="btn-zoom-initial">Zoom in a bit</button>
+  <button id="btn-home">Go Home</button>
+</div>
+
 <div id="layer-controls">
   <label><input type="checkbox" class="layer-toggle" data-layer="Ground Truth" checked> Ground Truth</label><br>
   <label><input type="checkbox" class="layer-toggle" data-layer="Object Detection" checked> Object Detection</label><br>
@@ -40,7 +46,6 @@
 <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
 <script>
 // ===== CONFIG =====
-// Keep everything in the repo root unless you change these paths.
 const dziPath = "17126465_dzi.dzi";
 const layers = {
   "Ground Truth": "17126465.json",
@@ -55,12 +60,11 @@ const layerColors = {
   "Merged": "#D55E00"
 };
 
-// UI labels
 document.getElementById('dziPathLabel').textContent = dziPath;
 const tileGuess = dziPath.replace(/\.dzi$/i, "_files/0/0_0.jpeg");
-document.getElementById('tileHint').textContent = location.origin + location.pathname.replace(/\/[^\/]*$/, '/') + tileGuess;
+document.getElementById('tileHint').textContent =
+  location.origin + location.pathname.replace(/\/[^\/]*$/, '/') + tileGuess;
 
-// Status helper
 function setStatus(msg, ok=false) {
   const el = document.getElementById('status');
   el.className = ok ? 'ok' : 'error';
@@ -69,49 +73,38 @@ function setStatus(msg, ok=false) {
   console[ok ? 'log' : 'error'](msg.replace(/<[^>]*>/g, ''));
 }
 
-// ===== Initialize OpenSeadragon =====
+// ===== OpenSeadragon =====
 const viewer = OpenSeadragon({
   id: "viewer",
   prefixUrl: "https://cdnjs.cloudflare.com/ajax/libs/openseadragon/4.1.0/images/",
   tileSources: dziPath,
   showNavigator: true,
   showZoomControl: true,
-  gestureSettingsMouse: {
-    clickToZoom: false,
-    dblClickToZoom: true,
-    scrollToZoom: true
-  }
+  gestureSettingsMouse: { clickToZoom: false, dblClickToZoom: true, scrollToZoom: true }
 });
 
-// Debug events
 viewer.addHandler('open', () => {
   setStatus("DZI opened successfully.", true);
-  console.log("OSD: open");
+  // Immediately zoom in a bit so you're not looking at the 1‑pixel level
+  viewer.viewport.zoomTo(viewer.viewport.getZoom() * 8, null, true);
 });
 
-viewer.addHandler('open-failed', (e) => {
-  setStatus("Failed to open DZI. Check that <code>" + dziPath + "</code> exists and the *_files folder is named correctly.", false);
-  console.error("OSD: open-failed", e);
-});
+viewer.addHandler('open-failed', (e) => setStatus("Failed to open DZI. Check that <code>"+dziPath+"</code> and the *_files folder exist.", false));
+viewer.addHandler('tile-load-failed', (e) => setStatus("Tile load failed: check Network tab for the URL.", false));
 
-viewer.addHandler('add-item-failed', (e) => {
-  setStatus("Failed to add item (tile source).", false);
-  console.error("OSD: add-item-failed", e);
+// Buttons
+document.getElementById('btn-zoom-initial').addEventListener('click', () => {
+  viewer.viewport.zoomTo(viewer.viewport.getZoom() * 4, null, true);
 });
+document.getElementById('btn-home').addEventListener('click', () => viewer.viewport.goHome(true));
 
-viewer.addHandler('tile-load-failed', (e) => {
-  setStatus("Tile load failed. Likely path or extension mismatch. See browser console Network tab for the failing URL.", false);
-  console.error("OSD: tile-load-failed", e);
-});
-
-// ===== Leaflet overlay on top of OSD =====
+// ===== Leaflet overlay =====
 let overlays = {};
 viewer.addHandler('open', function () {
-  // Create the Leaflet surface
   const leafletDiv = document.createElement('div');
   Object.assign(leafletDiv.style, {
     position: 'absolute', top: '0', left: '0', width: '100%', height: '100%',
-    pointerEvents: 'none' // Allow OSD interactions
+    pointerEvents: 'none', background: 'transparent', zIndex: 1
   });
   viewer.container.appendChild(leafletDiv);
 
@@ -126,20 +119,15 @@ viewer.addHandler('open', function () {
   const size = viewer.world.getItemAt(0).getContentSize();
   map.fitBounds([[0,0],[size.y, size.x]]);
 
-  // Sync pan/zoom from OSD → Leaflet
   viewer.addHandler('animation', function () {
     const center = viewer.viewport.getCenter();
     const centerPx = viewer.viewport.viewportToImageCoordinates(center);
     map.setView([centerPx.y, centerPx.x], map.getZoom(), { animate: false });
   });
 
-  // Load layers
   for (const [name, path] of Object.entries(layers)) {
     fetch(path)
-      .then(r => {
-        if (!r.ok) throw new Error(`HTTP ${r.status} for ${path}`);
-        return r.json();
-      })
+      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status} for ${path}`); return r.json(); })
       .then(geojson => {
         const layer = L.geoJSON(geojson, {
           style: () => ({ color: layerColors[name], weight: 1.5, fillOpacity: 0.2 })
@@ -147,12 +135,9 @@ viewer.addHandler('open', function () {
         layer.addTo(map);
         overlays[name] = layer;
       })
-      .catch(err => {
-        setStatus(`Failed to load layer <code>${name}</code> from <code>${path}</code>: ${err.message}`, false);
-      });
+      .catch(err => setStatus(`Failed to load layer <code>${name}</code> from <code>${path}</code>: ${err.message}`, false));
   }
 
-  // Layer toggles
   document.querySelectorAll('.layer-toggle').forEach(cb => {
     cb.addEventListener('change', e => {
       const layer = overlays[e.target.dataset.layer];
@@ -162,6 +147,5 @@ viewer.addHandler('open', function () {
   });
 });
 </script>
-
 </body>
 </html>
