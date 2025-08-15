@@ -86,7 +86,7 @@ const viewer = OpenSeadragon({
 viewer.addHandler('open', () => {
   setStatus("DZI opened successfully.", true);
   // Immediately zoom in a bit so you're not looking at the 1‑pixel level
-  viewer.viewport.zoomTo(viewer.viewport.getZoom() * 4, null, true);
+  viewer.viewport.zoomTo(home * 1.5, viewer.viewport.getCenter(), true);
 });
 
 viewer.addHandler('open-failed', (e) => setStatus("Failed to open DZI. Check that <code>"+dziPath+"</code> and the *_files folder exist.", false));
